@@ -23,11 +23,11 @@ from twisted.internet import error as ierror
 from twisted.python import failure, log
 from twisted.web import client, error, http_headers
 
-from twittytwister import streaming, txml
+from twittytwister import streaming, txml, txjson
 
 SIGNATURE_METHOD = oauth.OAuthSignatureMethod_HMAC_SHA1()
 
-BASE_URL="https://api.twitter.com/1"
+BASE_URL="https://api.twitter.com/1.1"
 SEARCH_URL="http://search.twitter.com/search.atom"
 
 
@@ -172,8 +172,8 @@ class Twitter(object):
         rv = []
         for k,v in h.iteritems():
             rv.append('%s=%s' %
-                (urllib.quote(k.encode("utf-8")),
-                urllib.quote(v.encode("utf-8"))))
+                (urllib.quote_plus(k.encode("utf-8")),
+                urllib.quote_plus(v.encode("utf-8"))))
         return '&'.join(rv)
 
     def __encodeMultipart(self, fields, files):
@@ -318,8 +318,8 @@ class Twitter(object):
         params['status'] = status
         if source:
             params['source'] = source
-        return self.__parsed_post(self.__post('/statuses/update.xml', params),
-            txml.parseUpdateResponse)
+        return self.__parsed_post(self.__post('/statuses/update.json', params),
+            txjson.parseUpdateResponse)
 
     def retweet(self, id, delegate):
         """Retweet a post
