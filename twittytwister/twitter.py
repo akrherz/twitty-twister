@@ -308,8 +308,8 @@ class Twitter(object):
 
     def __parsed_post(self, hdef, parser):
         deferred = defer.Deferred()
-        hdef.addErrback(lambda e: deferred.errback(e))
         hdef.addCallback(lambda p: deferred.callback(parser(p)))
+        hdef.addErrback(lambda e: deferred.errback(e))
         return deferred
 
     def update(self, status, source=None, params={}):
