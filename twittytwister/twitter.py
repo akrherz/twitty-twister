@@ -12,7 +12,6 @@ Twisted Twitter interface.
 import base64
 import urllib
 import mimetypes
-import mimetools
 import logging
 
 from oauth import oauth
@@ -41,16 +40,6 @@ def install_twisted_fix():
         client.HTTPClientFactory.gotHeaders(self, headers)
         orig_method(self, headers)
     client.HTTPDownloader.gotHeaders = gotHeaders
-
-def buggy_twisted():
-    o = client.HTTPDownloader('http://dummy-url/foo', None)
-    client.HTTPDownloader.gotHeaders(o, {})
-    if o.response_headers is None:
-        return True
-    return False
-
-if buggy_twisted():
-    install_twisted_fix()
 
 ##### end of hack
 
@@ -182,7 +171,7 @@ class Twitter(object):
         files is a sequence of (name, filename, value) elements for data to be uploaded as files
         Return (content_type, body) ready for httplib.HTTP instance
         """
-        boundary = mimetools.choose_boundary()
+        boundary = 'asdfasdfasdfasdfa'
         crlf = '\r\n'
 
         l = []

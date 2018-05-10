@@ -309,7 +309,7 @@ class TwitterStream(LengthDelimitedStream, TimeoutMixin):
         """
         try:
             obj = json.loads(data)
-        except ValueError, e:
+        except ValueError as e:
             log.err(e, 'Invalid JSON in stream: %r' % data)
             return
 

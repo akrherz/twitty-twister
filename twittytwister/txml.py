@@ -1,5 +1,4 @@
 from twisted.internet import error
-from twisted.web import sux, microdom
 
 import logging
 logger = logging.getLogger('twittytwister.txml')
@@ -249,7 +248,7 @@ def topLevelXMLHandler(toplevel_type):
                           enter_unknown=True)
 
 
-class Parser(sux.XMLParser):
+class Parser(object):
 
     """A file-like thingy that parses a friendfeed feed with SUX."""
     def __init__(self, handler):
@@ -346,8 +345,7 @@ PagedUserList = Pager(UserListPage, UserList)
 PagedIDList = Pager(IDListPage, IDList)
 
 
-def parseXML(xml):
-    return microdom.parseXMLString(xml)
+
 
 def parseUpdateResponse(xml):
     return parseXML(xml).getElementsByTagName("id")[0].firstChild().data

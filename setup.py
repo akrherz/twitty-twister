@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='twittytwister',
-    version='0.1.1',
+    version='0.1.3',
     description='Twitter client for Twisted Python',
     author='Dustin Sallings',
     author_email='dustin@spy.net',
