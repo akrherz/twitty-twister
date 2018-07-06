@@ -10,7 +10,10 @@ Twisted Twitter interface.
 """
 
 import base64
-import urllib
+try:
+    import urllib.parse as urlparse
+except:
+    import urllib as urlparse
 import mimetypes
 import logging
 
@@ -23,25 +26,24 @@ from twisted.python import failure, log
 from twisted.web import client, error, http_headers
 
 from twittytwister import streaming, txml, txjson
+from six import string_types
 
 SIGNATURE_METHOD = oauth.OAuthSignatureMethod_HMAC_SHA1()
-
-BASE_URL="https://api.twitter.com/1.1"
-SEARCH_URL="http://search.twitter.com/search.atom"
-
-
+BASE_URL = "https://api.twitter.com/1.1"
+SEARCH_URL = "http://search.twitter.com/search.atom"
 logger = logging.getLogger('twittytwister.twitter')
 
 
-##### ugly hack to work around a bug on HTTPDownloader on Twisted 8.2.0 (fixed on 9.0.0)
-def install_twisted_fix():
-    orig_method = client.HTTPDownloader.gotHeaders
-    def gotHeaders(self, headers):
-        client.HTTPClientFactory.gotHeaders(self, headers)
-        orig_method(self, headers)
-    client.HTTPDownloader.gotHeaders = gotHeaders
-
-##### end of hack
+# https://stackoverflow.com/questions/33137741
+def convert(data):
+    """Convert strings to bytes"""
+    if isinstance(data, string_types):
+        return data.encode('utf-8', 'ignore')
+    if isinstance(data, dict):
+        return dict(map(convert, data.items()))
+    if isinstance(data, tuple):
+        return map(convert, data)
+    return data
 
 
 class TwitterClientInfo:
@@ -52,11 +54,11 @@ class TwitterClientInfo:
 
     def get_headers (self):
         headers = [
-                ('X-Twitter-Client',self.name),
-                ('X-Twitter-Client-Version',self.version),
-                ('X-Twitter-Client-URL',self.url),
+                ('X-Twitter-Client', self.name),
+                ('X-Twitter-Client-Version', self.version),
+                ('X-Twitter-Client-URL', self.url),
                 ]
-        return dict(filter(lambda x: x[1] != None, headers))
+        return dict(filter(lambda x: x[1] is not None, headers))
 
     def get_source (self):
         return self.name
@@ -71,17 +73,17 @@ def __downloadPage(factory, *args, **kwargs):
     #    a HTTPDownloader object
 
     #TODO: convert getPage() usage to something similar, too
-
     downloader = factory(*args, **kwargs)
     if downloader.scheme == 'https':
-        from twisted.internet import ssl
-        contextFactory = ssl.ClientContextFactory()
+        #from twisted.internet import ssl
+        #contextFactory = ssl.ClientContextFactory()
         reactor.connectSSL(downloader.host, downloader.port,
-                           downloader, contextFactory)
+                           downloader)
     else:
         reactor.connectTCP(downloader.host, downloader.port,
                            downloader)
     return downloader
+
 
 def downloadPage(url, file, timeout=0, **kwargs):
     c = __downloadPage(client.HTTPDownloader, url, file, **kwargs)
@@ -91,16 +93,21 @@ def downloadPage(url, file, timeout=0, **kwargs):
         c.timeout = timeout
     return c
 
-def getPage(url, *args, **kwargs):
-    return __downloadPage(client.HTTPClientFactory, url, *args, **kwargs)
+
+#def getPage(url, *args, **kwargs):
+#    """helper"""
+#    return __downloadPage(client.HTTPClientFactory, url.encode('utf-8'),
+#                          *args, **kwargs)
 
 class Twitter(object):
 
-    agent="twitty twister"
+    agent = "twitty twister"
 
     def __init__(self, user=None, passwd=None,
-        base_url=BASE_URL, search_url=SEARCH_URL,
-                 consumer=None, token=None, signature_method=SIGNATURE_METHOD,client_info = None, timeout=0):
+                 base_url=BASE_URL, search_url=SEARCH_URL,
+                 consumer=None, token=None,
+                 signature_method=SIGNATURE_METHOD,
+                 client_info=None, timeout=0):
 
         self.base_url = base_url
         self.search_url = search_url
@@ -159,10 +166,9 @@ class Twitter(object):
 
     def _urlencode(self, h):
         rv = []
-        for k,v in h.iteritems():
-            rv.append('%s=%s' %
-                (urllib.quote_plus(k.encode("utf-8")),
-                urllib.quote_plus(v.encode("utf-8"))))
+        for k, v in h.items():
+            rv.append('%s=%s' % (urlparse.quote_plus(k.encode("utf-8")),
+                                 urlparse.quote_plus(v.encode("utf-8"))))
         return '&'.join(rv)
 
     def __encodeMultipart(self, fields, files):
@@ -235,27 +241,29 @@ class Twitter(object):
 
         self._makeAuthHeader('POST', url, headers=headers)
 
-        c = getPage(url, method='POST',
-            agent=self.agent,
-            postdata=body, headers=headers, timeout=self.timeout)
-        return self.__clientDefer(c)
+        c = client.getPage(url, method='POST',
+                           agent=self.agent,
+                           postdata=body, headers=headers,
+                           timeout=self.timeout)
+        return c
 
     #TODO: deprecate __post()?
     def __post(self, path, args={}):
-        headers = {'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8'}
-
+        headers = {b'Content-Type': b'application/x-www-form-urlencoded; charset=utf-8'}
+        method = b'POST'
         url = self.base_url + path
 
-        self._makeAuthHeader('POST', url, args, headers)
+        self._makeAuthHeader(method, url, args, headers)
 
-        if self.client_info != None:
+        if self.client_info is not None:
             headers.update(self.client_info.get_headers())
             args['source'] = self.client_info.get_source()
 
-        c = getPage(url, method='POST',
-            agent=self.agent,
-            postdata=self._urlencode(args), headers=headers, timeout=self.timeout)
-        return self.__clientDefer(c)
+        c = client.getPage(url.encode('utf-8'), method=method,
+                           agent=self.agent,
+                           postdata=convert(self._urlencode(args)),
+                           headers=convert(headers), timeout=self.timeout)
+        return c
 
     def __doDownloadPage(self, *args, **kwargs):
         """Works like client.downloadPage(), but handle incoming headers
@@ -308,7 +316,7 @@ class Twitter(object):
         if source:
             params['source'] = source
         return self.__parsed_post(self.__post('/statuses/update.json', params),
-            txjson.parseUpdateResponse)
+                                  txjson.parseUpdateResponse)
 
     def retweet(self, id, delegate):
         """Retweet a post
@@ -583,7 +591,7 @@ class TwitterFeed(Twitter):
         authHeaders = self._makeAuthHeader("GET", url, args)
         rawHeaders = dict([(name, [value])
                            for name, value
-                           in authHeaders.iteritems()])
+                           in authHeaders.items()])
         headers = http_headers.Headers(rawHeaders)
         d = self.agent.request('GET', url, headers, None)
         d.addCallback(cb)
@@ -1162,7 +1170,7 @@ class TwitterMonitor(service.Service):
         log.err(reason)
 
         def matchException(failure):
-            for errorState, backOff in self.backOffs.iteritems():
+            for errorState, backOff in self.backOffs.items():
                 if 'errorTypes' not in backOff:
                     continue
                 if failure.check(*backOff['errorTypes']):
